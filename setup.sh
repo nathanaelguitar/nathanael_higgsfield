@@ -83,7 +83,13 @@ if (( DOWNLOAD_MODELS )); then
   mkdir -p "${MODELS_ROOT}"
   "${HF_BIN}" download Wan-AI/Wan2.1-T2V-1.3B --local-dir "${MODELS_ROOT}/Wan2.1-T2V-1.3B"
   "${HF_BIN}" download BadToBest/EchoMimicV3 --local-dir "${MODELS_ROOT}/EchoMimicV3"
+  "${HF_BIN}" download alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP --local-dir "${MODELS_ROOT}/EchoMimicV3/Wan2.1-Fun-V1.1-1.3B-InP"
   "${HF_BIN}" download facebook/wav2vec2-base-960h --local-dir "${MODELS_ROOT}/EchoMimicV3/wav2vec2-base-960h"
+  if uv pip install --python "${PY}" modelscope; then
+    "${PY}" -m modelscope download --model TencentGameMate/chinese-wav2vec2-base --local_dir "${MODELS_ROOT}/EchoMimicV3/chinese-wav2vec2-base"
+  else
+    printf '%s\n' 'WARNING: modelscope unavailable; EchoMimic flash audio encoder must be downloaded separately.' >&2
+  fi
   "${HF_BIN}" download fudan-generative-ai/hallo --local-dir "${MODELS_ROOT}/Hallo"
   "${HF_BIN}" download KlingTeam/LivePortrait --local-dir "${MODELS_ROOT}/LivePortrait" --exclude '*.git*' README.md docs
   "${HF_BIN}" download tencent/MimicMotion --include MimicMotion_1-1.pth --local-dir "${MODELS_ROOT}/MimicMotion"
