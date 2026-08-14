@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Large local assets and generated media
+models/*
+!models/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Shallow clones are bootstrapped by setup.sh, not vendored into this repo.
+third_party/*
+!third_party/.gitkeep

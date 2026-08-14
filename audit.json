@@ -1,0 +1,27 @@
+{
+  "conclusion": "No single official all-in-one local CLI was found; the cleanest architecture is an adapter-based orchestrator.",
+  "repositories": {
+    "Wan2.1": {"url": "https://github.com/Wan-Video/Wan2.1", "role": "foundation T2V/I2V", "commit": "9737cba9c1c3c4d04b33fcad41c111989865d315"},
+    "Hallo": {"url": "https://github.com/fudan-generative-vision/hallo", "role": "audio-driven portrait", "commit": "8fd7c572a3d43c2a9c1a5473219ce4fc1b6e3ed2"},
+    "LivePortrait": {"url": "https://github.com/KwaiVGI/LivePortrait", "role": "video-driven portrait reenactment; not audio-native", "commit": "9b294b3d0536135442ea73cb01e6cb3ca7029dd"},
+    "EchoMimicV3": {"url": "https://github.com/antgroup/echomimic_v3", "role": "audio-driven human animation", "commit": "7e89489ca51c0d008fc1963ec6c03fc5bd0b939"},
+    "MimicMotion": {"url": "https://github.com/tencent/MimicMotion", "role": "pose-video motion transfer", "commit": "6907bdcc259a6a048d41a365e840d22274f9256c"},
+    "CodeFormer": {"url": "https://github.com/sczhou/CodeFormer", "role": "face restoration", "commit": "b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b"},
+    "ComfyUI": {"url": "https://github.com/comfyanonymous/ComfyUI", "role": "workflow runtime", "commit": "7fe8a6138504f90ff7be82f3babf416da32876b1"},
+    "ComfyUI-WanVideoWrapper": {"url": "https://github.com/kijai/ComfyUI-WanVideoWrapper", "role": "Wan custom nodes", "commit": "088128b224242e110d3906c6750e9a3a348a659b"}
+  },
+  "model_sources": {
+    "wan": "Wan-AI/Wan2.1-T2V-1.3B or Wan-AI/Wan2.1-I2V-14B-720P",
+    "echomimic": "BadToBest/EchoMimicV3",
+    "hallo": "fudan-generative-ai/hallo",
+    "liveportrait": "KlingTeam/LivePortrait",
+    "mimicmotion": "tencent/MimicMotion",
+    "audio_encoder": "facebook/wav2vec2-base-960h"
+  },
+  "limitations": [
+    "LivePortrait consumes a driving video, so it cannot replace an audio-driven reenactment stage by itself.",
+    "MimicMotion consumes pose guidance and is not a talking-head audio synchronizer.",
+    "Wan/Hunyuan generation and face reenactment are separate model graphs; ComfyUI provides composition, not a canonical UGC API.",
+    "Photorealistic identity preservation and consent depend on the supplied portrait, voice rights, and model checkpoint quality."
+  ]
+}
