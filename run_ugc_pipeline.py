@@ -100,6 +100,23 @@ def _probe_duration(path: Path) -> float:
         raise PipelineError(f"Could not read media duration from {path}") from exc
 
 
+def _probe_fps(path: Path) -> float:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate",
+         "-of", "default=nw=1:nk=1", str(path)],
+        check=True, capture_output=True, text=True,
+    )
+    value = result.stdout.strip()
+    try:
+        numerator, denominator = value.split("/", 1)
+        fps = float(numerator) / float(denominator)
+        if fps <= 0:
+            raise ValueError
+        return fps
+    except (ValueError, ZeroDivisionError) as exc:
+        raise PipelineError(f"Could not read video FPS from {path}") from exc
+
+
 def _validate_input(config: PipelineConfig) -> float:
     _require_ffmpeg()
     if config.audio is None:
@@ -341,10 +358,14 @@ def _stage_three(config: PipelineConfig, animated: StageArtifact, duration: floa
             config.notes.append("CodeFormer weights unavailable; Stage 3 used passthrough.")
         else:
             result_dir = work / "codeformer_results"
+            # CodeFormer writes one output frame per input frame. Preserve the
+            # animation stream rate here; the final mux is where we promote
+            # the result to the requested delivery FPS.
+            animation_fps = _probe_fps(animated.path)
             _run([
                 sys.executable, str(script), "--input_path", str(animated.path), "--output_path", str(result_dir),
                 "--detection_model", "retinaface_resnet50", "--upscale", "1", "-w", "0.7",
-                "--save_video_fps", str(config.fps),
+                "--save_video_fps", str(animation_fps),
             ], cwd=codeformer, env=env)
             candidates = sorted(result_dir.rglob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
             if not candidates:
