@@ -1,8 +1,8 @@
 # Local UGC actor engine
 
 This is a stage-isolated orchestration layer for a local NVIDIA DGX Spark. It
-can run a 10-second FFmpeg integration demo immediately, while model stages are
-enabled only when their repositories and weights are present.
+can run a 10-second FFmpeg integration demo immediately, and it has a tested
+real EchoMimicV3 audio-driven path when its repositories and weights are present.
 
 ## Architecture
 
@@ -15,8 +15,10 @@ enabled only when their repositories and weights are present.
    encodes H.264/AAC, and muxes the input voice.
 
 Each stage runs separately and releases PyTorch CUDA caches before the next
-stage. Sequential CPU offload is passed to EchoMimicV3 to reduce peak memory
-pressure on unified memory.
+stage. Sequential CPU offload is applied to EchoMimicV3 (the upstream flag did
+not activate it) to reduce peak memory pressure on unified memory. The default
+512px/8-step profile is intended for production portraits; use 256px/2-step
+for a fast smoke test.
 
 ## Setup and demo
 
@@ -39,6 +41,23 @@ only after confirming storage and licenses: `./setup.sh --download-models`.
   --animation-backend echomimic --enhancer auto \
   --output outputs/creator.mp4
 ```
+
+For a bounded DGX Spark smoke render:
+
+```bash
+.venv/bin/python run_ugc_pipeline.py \
+  --reference portrait.jpg --audio voice.wav --duration 10 \
+  --animation-backend echomimic --enhancer codeformer \
+  --echo-sample-size 256 --echo-steps 2 --output outputs/creator.mp4
+```
+
+The verified local 10-second smoke path completed in about 95 seconds on the
+DGX Spark and emitted 1080x1920 H.264/AAC at 60 fps. The sample used a
+synthetic portrait and low-step settings, so it validates orchestration and
+audio conditioning—not photorealistic quality. Use a real high-resolution
+portrait and the default 512px/8-step profile for quality, subject to runtime
+and memory limits. CodeFormer is optional and falls back only when `--enhancer
+auto` is used; `--enhancer codeformer` fails fast if its weights are absent.
 
 External commands receive shell-quoted placeholders `{prompt}`, `{reference}`,
 `{output}`, `{duration}`, `{width}`, `{height}`, `{fps}`, and `{models}`.

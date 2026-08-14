@@ -54,14 +54,28 @@ fi
 PY="${VENV_DIR}/bin/python"
 uv pip install --python "${PY}" -r "${ROOT_DIR}/requirements-base.txt"
 
+# EchoMimic's flash branch currently depends on this compatible runtime and
+# has an aarch64-incompatible optional decord import. Keep the patch explicit
+# and reproducible instead of relying on an ignored working-tree edit.
+if [[ -f "${ROOT_DIR}/third_party/EchoMimicV3/infer_flash.py" ]]; then
+  "${PY}" "${ROOT_DIR}/compat/patch_echomimic.py" "${ROOT_DIR}/third_party/EchoMimicV3"
+fi
+if [[ -d "${ROOT_DIR}/third_party/CodeFormer" ]]; then
+  "${PY}" "${ROOT_DIR}/compat/patch_codeformer.py" "${ROOT_DIR}/third_party/CodeFormer"
+fi
+
 if (( INSTALL_HEAVY )); then
-  # CUDA 12.8 wheels are forward-compatible with the installed CUDA 13 driver.
-  # Override TORCH_INDEX_URL for a vendor-specific DGX ARM64 wheel if needed.
-  TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
+  # DGX Spark exposes CUDA 13 on aarch64. Override this for a vendor-specific
+  # wheel index if the workstation image supplies one.
+  TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu130}"
   printf 'Installing CUDA PyTorch from %s for %s...\n' "${TORCH_INDEX_URL}" "${ARCH}"
   uv pip install --python "${PY}" torch torchvision torchaudio --index-url "${TORCH_INDEX_URL}"
-  uv pip install --python "${PY}" diffusers transformers accelerate safetensors \
-    omegaconf librosa moviepy opencv-python-headless einops sentencepiece
+  # EchoMimicV3's custom pipeline is tested against these APIs. Unbounded
+  # latest installs currently pull incompatible Diffusers/Transformers APIs.
+  uv pip install --python "${PY}" \
+    "diffusers==0.30.1" "transformers==4.46.2" "accelerate==0.34.2" safetensors \
+    omegaconf librosa moviepy opencv-python-headless einops sentencepiece \
+    addict lmdb scikit-image tb-nightly yapf lpips gdown ffmpeg-python
   # FlashAttention is optional and may not publish a GB10/aarch64 wheel.
   if ! uv pip install --python "${PY}" flash-attn --no-build-isolation; then
     printf '%s\n' 'WARNING: flash-attn unavailable; attention falls back to PyTorch.' >&2
@@ -85,11 +99,7 @@ if (( DOWNLOAD_MODELS )); then
   "${HF_BIN}" download BadToBest/EchoMimicV3 --local-dir "${MODELS_ROOT}/EchoMimicV3"
   "${HF_BIN}" download alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP --local-dir "${MODELS_ROOT}/EchoMimicV3/Wan2.1-Fun-V1.1-1.3B-InP"
   "${HF_BIN}" download facebook/wav2vec2-base-960h --local-dir "${MODELS_ROOT}/EchoMimicV3/wav2vec2-base-960h"
-  if uv pip install --python "${PY}" modelscope; then
-    "${PY}" -m modelscope download --model TencentGameMate/chinese-wav2vec2-base --local_dir "${MODELS_ROOT}/EchoMimicV3/chinese-wav2vec2-base"
-  else
-    printf '%s\n' 'WARNING: modelscope unavailable; EchoMimic flash audio encoder must be downloaded separately.' >&2
-  fi
+  printf '%s\n' 'Using facebook/wav2vec2-base-960h as the validated aarch64 audio-encoder fallback.'
   "${HF_BIN}" download fudan-generative-ai/hallo --local-dir "${MODELS_ROOT}/Hallo"
   "${HF_BIN}" download KlingTeam/LivePortrait --local-dir "${MODELS_ROOT}/LivePortrait" --exclude '*.git*' README.md docs
   "${HF_BIN}" download tencent/MimicMotion --include MimicMotion_1-1.pth --local-dir "${MODELS_ROOT}/MimicMotion"

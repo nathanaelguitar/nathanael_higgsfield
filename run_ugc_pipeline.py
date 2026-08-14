@@ -49,6 +49,9 @@ class PipelineConfig:
     foundation_command: str | None = None
     animation_command: str | None = None
     enhancer_command: str | None = None
+    echo_sample_size: int = 512
+    echo_steps: int = 8
+    echo_memory_mode: str = "sequential_cpu_offload"
     allow_fallback: bool = False
     demo: bool = False
     keep_intermediates: bool = False
@@ -123,7 +126,10 @@ def _configure_runtime() -> dict[str, str]:
     os.environ.setdefault("PYTORCH_ALLOC_CONF", os.environ["PYTORCH_CUDA_ALLOC_CONF"])
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     os.environ.setdefault("CUDA_DEVICE_MAX_CONNECTIONS", "1")
-    return dict(os.environ)
+    env = dict(os.environ)
+    compat = PROJECT_ROOT / "compat"
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(compat), env.get("PYTHONPATH", ""))))
+    return env
 
 
 def _release_torch_memory() -> None:
@@ -150,6 +156,15 @@ def _copy_file(source: Path, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
     return target
+
+
+def _valid_safetensors(path: Path) -> bool:
+    """Reject interrupted/mislabeled downloads before model loading."""
+    try:
+        header_size = int.from_bytes(path.read_bytes()[:8], "little")
+        return 0 < header_size < 10_000_000 and header_size + 8 < path.stat().st_size
+    except (OSError, ValueError):
+        return False
 
 
 def _make_portrait_card(path: Path, *, width: int = 768, height: int = 1024) -> None:
@@ -220,23 +235,38 @@ def _echo_command(config: PipelineConfig, output_dir: Path, duration: float) -> 
     script = repo / "infer_flash.py"
     model_root = config.models_root / "EchoMimicV3"
     flash_root = model_root / "flash"
-    model = next((candidate for candidate in (model_root / "Wan2.1-Fun-V1.1-1.3B-InP", flash_root / "Wan2.1-Fun-V1.1-1.3B-InP") if candidate.is_dir()), model_root / "Wan2.1-Fun-V1.1-1.3B-InP")
-    transformer = next((candidate for candidate in (model_root / "transformer" / "diffusion_pytorch_model.safetensors", flash_root / "transformer" / "diffusion_pytorch_model.safetensors") if candidate.is_file()), model_root / "transformer" / "diffusion_pytorch_model.safetensors")
-    wav2vec = next((candidate for candidate in (model_root / "chinese-wav2vec2-base", flash_root / "chinese-wav2vec2-base", model_root / "wav2vec2-base-960h") if candidate.is_dir()), model_root / "chinese-wav2vec2-base")
+    flash_hf_root = model_root / "echomimicv3-flash-pro"
+    model = next((candidate for candidate in (model_root / "Wan2.1-Fun-V1.1-1.3B-InP", flash_root / "Wan2.1-Fun-V1.1-1.3B-InP", flash_hf_root / "Wan2.1-Fun-V1.1-1.3B-InP") if candidate.is_dir()), model_root / "Wan2.1-Fun-V1.1-1.3B-InP")
+    transformer = next((candidate for candidate in (model_root / "transformer" / "diffusion_pytorch_model.safetensors", flash_root / "transformer" / "diffusion_pytorch_model.safetensors", flash_hf_root / "diffusion_pytorch_model.safetensors") if candidate.is_file()), model_root / "transformer" / "diffusion_pytorch_model.safetensors")
+    audio_candidates = (model_root / "chinese-wav2vec2-base", flash_root / "chinese-wav2vec2-base", flash_hf_root / "chinese-wav2vec2-base", model_root / "wav2vec2-base-960h")
+    wav2vec = next((candidate for candidate in audio_candidates if (candidate / "model.safetensors").is_file() and _valid_safetensors(candidate / "model.safetensors")), model_root / "wav2vec2-base-960h")
     if not script.is_file():
         raise PipelineError(f"EchoMimicV3 source is missing: {script}")
     if config.reference is None:
         raise PipelineError("EchoMimicV3 requires --reference because it animates a portrait image.")
-    return [
+    command = [
         sys.executable, str(script), "--image_path", str(config.reference), "--audio_path", str(config.audio),
-        "--prompt", config.prompt or config.portrait_prompt, "--num_inference_steps", "8",
+        "--prompt", config.prompt or config.portrait_prompt, "--num_inference_steps", str(config.echo_steps),
         "--config_path", str(repo / "config" / "config.yaml"), "--model_name", str(model),
         "--transformer_path", str(transformer), "--save_path", str(output_dir), "--wav2vec_model_dir", str(wav2vec),
         "--sampler_name", "Flow_Unipc", "--video_length", str(max(1, int(duration * 25))),
         "--guidance_scale", "6", "--audio_guidance_scale", "2.5", "--seed", str(config.seed),
-        "--enable_teacache", "--teacache_threshold", "0.1", "--GPU_memory_mode", "sequential_cpu_offload",
-        "--weight_dtype", "bfloat16", "--sample_size", "768", "768", "--fps", "25",
+        "--GPU_memory_mode", config.echo_memory_mode,
+        "--weight_dtype", "bfloat16", "--sample_size", str(config.echo_sample_size), str(config.echo_sample_size), "--fps", "25",
     ]
+    # EchoMimic's upstream TeaCache defaults to skipping five steps, which is
+    # invalid for tiny smoke renders. Keep the optimization for normal runs.
+    if config.echo_steps > 5:
+        command[command.index("--GPU_memory_mode"):command.index("--GPU_memory_mode")] = [
+            "--enable_teacache", "--teacache_threshold", "0.1",
+        ]
+    else:
+        # The upstream parser enables TeaCache by default even when the flag
+        # is absent; make its skip window valid for tiny smoke runs.
+        command[command.index("--GPU_memory_mode"):command.index("--GPU_memory_mode")] = [
+            "--num_skip_start_steps", "0",
+        ]
+    return command
 
 
 def _hallo_command(config: PipelineConfig, output: Path) -> list[str]:
@@ -292,7 +322,11 @@ def _stage_three(config: PipelineConfig, animated: StageArtifact, duration: floa
     backend = config.enhancer
     codeformer = config.repos_root / "CodeFormer"
     if backend == "auto":
-        backend = "codeformer" if config.enhancer_command else "passthrough"
+        codeformer_ready = (
+            (codeformer / "inference_codeformer.py").is_file()
+            and (codeformer / "weights" / "CodeFormer" / "codeformer.pth").is_file()
+        )
+        backend = "codeformer" if codeformer_ready else "passthrough"
     if config.enhancer_command:
         command = _render_command(config.enhancer_command, {"input": animated.path, "video": animated.path, "output": enhanced, "models": config.models_root, "duration": duration})
         _run(command, cwd=PROJECT_ROOT, env=env)
@@ -309,7 +343,8 @@ def _stage_three(config: PipelineConfig, animated: StageArtifact, duration: floa
             result_dir = work / "codeformer_results"
             _run([
                 sys.executable, str(script), "--input_path", str(animated.path), "--output_path", str(result_dir),
-                "--bg_upsampler", "realesrgan", "--face_upsample", "-w", "0.7", "--save_video_fps", str(config.fps),
+                "--detection_model", "retinaface_resnet50", "--upscale", "1", "-w", "0.7",
+                "--save_video_fps", str(config.fps),
             ], cwd=codeformer, env=env)
             candidates = sorted(result_dir.rglob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
             if not candidates:
@@ -390,6 +425,12 @@ def _parse_args(argv: Iterable[str] | None = None) -> PipelineConfig:
     parser.add_argument("--foundation-command", help="Command template with {prompt} {reference} {output} {models} placeholders")
     parser.add_argument("--animation-command", help="Command template with {foundation} {reference} {audio} {output} {models} placeholders")
     parser.add_argument("--enhancer-command", help="Command template with {input} {output} {models} placeholders")
+    parser.add_argument("--echo-sample-size", type=int, choices=(256, 384, 512, 768), default=512,
+                        help="EchoMimic square render size; 512 is the DGX Spark-safe default")
+    parser.add_argument("--echo-steps", type=int, default=8,
+                        help="EchoMimic denoising steps (lower for smoke tests)")
+    parser.add_argument("--echo-memory-mode", choices=("sequential_cpu_offload", "model_cpu_offload", "none"),
+                        default="sequential_cpu_offload")
     parser.add_argument("--allow-fallback", action="store_true")
     parser.add_argument("--keep-intermediates", action="store_true")
     args = parser.parse_args(argv)
