@@ -32,6 +32,18 @@ def test_demo_cli_sets_ten_seconds(monkeypatch):
     assert config.animation_backend == "passthrough"
 
 
+def test_voice_clone_cli_fields_are_preserved():
+    config = pipeline._parse_args([
+        "--reference", "portrait.jpg",
+        "--script", "Hello from CanopyChat",
+        "--voice-reference", "reference.wav",
+        "--voice-reference-text", "Hello from the reference recording",
+    ])
+    assert config.script == "Hello from CanopyChat"
+    assert config.voice_reference == Path("reference.wav")
+    assert config.voice_reference_text == "Hello from the reference recording"
+
+
 def test_final_filter_is_vertical_1080p(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(pipeline, "_run", lambda command, **kwargs: calls.append(command))
@@ -44,3 +56,4 @@ def test_final_filter_is_vertical_1080p(monkeypatch, tmp_path):
     joined = " ".join(calls[-1])
     assert "scale=1080:1920" in joined
     assert "fps=60" in joined
+    assert "apad" in joined

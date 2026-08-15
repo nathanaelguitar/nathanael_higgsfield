@@ -42,6 +42,33 @@ only after confirming storage and licenses: `./setup.sh --download-models`.
   --output outputs/creator.mp4
 ```
 
+### Authorized local voice cloning
+
+Install the isolated NeuTTS environment so its speech dependencies do not
+disturb the video runtime:
+
+```bash
+./setup.sh --install-voice-clone
+```
+
+Provide a clean reference recording and its exact transcript. The pipeline
+normalizes the recording to the 24 kHz mono format required by the codec,
+synthesizes `--script`, and feeds the result into the same animation and mux
+stages:
+
+```bash
+.venv/bin/python run_ugc_pipeline.py \
+  --reference portrait.jpg \
+  --script "That's why you should switch to CanopyChat." \
+  --voice-reference authorized_voice.wav \
+  --voice-reference-text "Exact words spoken in authorized_voice.wav" \
+  --animation-backend echomimic --enhancer codeformer \
+  --output outputs/creator-cloned-voice.mp4
+```
+
+Only use reference voices with the speaker's informed consent and the rights
+to synthesize them; label synthetic media where required.
+
 For a bounded DGX Spark smoke render:
 
 ```bash

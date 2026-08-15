@@ -35,6 +35,10 @@ class PipelineConfig:
     reference: Path | None = None
     prompt: str | None = None
     audio: Path | None = None
+    script: str | None = None
+    voice_reference: Path | None = None
+    voice_reference_text: str | None = None
+    voice_venv: Path = PROJECT_ROOT / ".voice_venv"
     output: Path = DEFAULT_OUTPUTS / "ugc_actor.mp4"
     duration: float | None = None
     width: int = 1080
@@ -215,6 +219,37 @@ def _make_image_video(image: Path, output: Path, *, duration: float, width: int,
     ])
 
 
+def _prepare_voice(config: PipelineConfig, work: Path, env: dict[str, str]) -> None:
+    if not config.script:
+        return
+    if config.voice_reference is None or not config.voice_reference.is_file():
+        raise PipelineError("--script requires an existing --voice-reference audio file.")
+    if not config.voice_reference_text:
+        raise PipelineError("--script requires --voice-reference-text for the cloned voice sample.")
+    voice_python = config.voice_venv.expanduser().resolve() / "bin" / "python"
+    if not voice_python.is_file():
+        raise PipelineError("Voice clone environment is missing; run setup.sh --install-voice-clone.")
+    config.audio = work / "voice_clone.wav"
+    raw_audio = work / "voice_clone_raw.wav"
+    _run([
+        str(voice_python), str(PROJECT_ROOT / "voice_clone.py"),
+        "--reference-audio", str(config.voice_reference),
+        "--reference-text", config.voice_reference_text,
+        "--text", config.script,
+        "--output", str(raw_audio),
+    ], cwd=PROJECT_ROOT, env={**env, "PYTHONPATH": os.pathsep.join((str(PROJECT_ROOT / "compat_tts"), env.get("PYTHONPATH", "")))})
+    if config.duration:
+        # Keep the animation stage conditioned for the full requested shot,
+        # even when the cloned utterance itself is shorter than the shot.
+        _run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(raw_audio), "-af", "apad",
+            "-t", f"{config.duration:.3f}", "-ac", "1", "-ar", "24000",
+            "-c:a", "pcm_s16le", str(config.audio),
+        ])
+    else:
+        _copy_file(raw_audio, config.audio)
+
+
 def _stage_one(config: PipelineConfig, duration: float, work: Path, env: dict[str, str]) -> StageArtifact:
     output = work / "stage1_foundation.mp4"
     backend = config.foundation_backend
@@ -385,7 +420,8 @@ def _final_mux(config: PipelineConfig, enhanced: StageArtifact, duration: float)
     _run([
         "ffmpeg", "-y", "-i", str(enhanced.path), "-i", str(config.audio), "-map", "0:v:0", "-map", "1:a:0",
         "-t", f"{duration:.3f}", "-vf", vf, "-r", str(config.fps), "-c:v", "libx264", "-preset", "medium",
-        "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-shortest",
+        "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+        "-af", "apad", "-shortest",
         "-movflags", "+faststart", str(output),
     ])
     return output
@@ -396,13 +432,16 @@ def run_pipeline(config: PipelineConfig) -> dict[str, Any]:
         config.reference = config.reference.expanduser().resolve()
     if config.audio is not None:
         config.audio = config.audio.expanduser().resolve()
-    duration = _validate_input(config)
     env = _configure_runtime()
     config.models_root = config.models_root.expanduser().resolve()
     config.output = config.output.expanduser().resolve()
     config.output.parent.mkdir(parents=True, exist_ok=True)
     work = Path(config.work_root).expanduser().resolve() if config.work_root else Path(tempfile.mkdtemp(prefix="ugc-pipeline-", dir=str(config.output.parent)))
     work.mkdir(parents=True, exist_ok=True)
+    if config.voice_reference is not None:
+        config.voice_reference = config.voice_reference.expanduser().resolve()
+    _prepare_voice(config, work, env)
+    duration = _validate_input(config)
     print(f"[pipeline] work directory: {work}")
     start = time.monotonic()
     foundation = _stage_one(config, duration, work, env)
@@ -431,6 +470,10 @@ def _parse_args(argv: Iterable[str] | None = None) -> PipelineConfig:
     source.add_argument("--reference", type=Path, help="High-resolution portrait image")
     source.add_argument("--prompt", help="Prompt for an external Wan/Hunyuan/ComfyUI foundation adapter")
     source.add_argument("--audio", type=Path, help="Voice audio file")
+    source.add_argument("--script", help="Text to synthesize in the authorized voice reference")
+    source.add_argument("--voice-reference", type=Path, help="Reference voice audio for local cloning")
+    source.add_argument("--voice-reference-text", help="Transcript matching --voice-reference")
+    parser.add_argument("--voice-venv", type=Path, default=PROJECT_ROOT / ".voice_venv")
     source.add_argument("--demo", action="store_true", help="Create a 10-second synthetic integration demo")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUTS / "ugc_actor.mp4")
     parser.add_argument("--duration", type=float)

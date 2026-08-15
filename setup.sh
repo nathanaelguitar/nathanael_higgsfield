@@ -3,16 +3,19 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${VENV_DIR:-${ROOT_DIR}/.venv}"
+VOICE_VENV_DIR="${VOICE_VENV_DIR:-${ROOT_DIR}/.voice_venv}"
 MODELS_ROOT="${MODELS_ROOT:-${ROOT_DIR}/models}"
 PYTHON_BIN="${PYTHON_BIN:-python3.12}"
 DOWNLOAD_MODELS=0
 INSTALL_HEAVY=0
 INSTALL_COMFYUI=0
+INSTALL_VOICE_CLONE=0
 
 usage() {
-  printf '%s\n' "Usage: $0 [--install-heavy] [--install-comfyui] [--download-models]"
+  printf '%s\n' "Usage: $0 [--install-heavy] [--install-comfyui] [--install-voice-clone] [--download-models]"
   printf '%s\n' "  --install-heavy   install CUDA PyTorch and model-runtime dependencies"
   printf '%s\n' "  --install-comfyui clone/install ComfyUI wrapper dependencies"
+  printf '%s\n' "  --install-voice-clone install the isolated NeuTTS reference-voice environment"
   printf '%s\n' "  --download-models download default checkpoints (several GB)"
 }
 
@@ -20,6 +23,7 @@ for arg in "$@"; do
   case "$arg" in
     --install-heavy) INSTALL_HEAVY=1 ;;
     --install-comfyui) INSTALL_COMFYUI=1 ;;
+    --install-voice-clone) INSTALL_VOICE_CLONE=1 ;;
     --download-models) DOWNLOAD_MODELS=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
@@ -50,6 +54,17 @@ ensure_repo "CodeFormer" "https://github.com/sczhou/CodeFormer.git"
 
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
   uv venv --python "${PYTHON_BIN}" "${VENV_DIR}"
+fi
+
+if (( INSTALL_VOICE_CLONE )); then
+  # Keep NeuTTS isolated: its current Transformers/torchaudio requirements are
+  # intentionally independent from the EchoMimic runtime in .venv.
+  if [[ ! -x "${VOICE_VENV_DIR}/bin/python" ]]; then
+    uv venv --python "${PYTHON_BIN}" "${VOICE_VENV_DIR}"
+  fi
+  VOICE_PY="${VOICE_VENV_DIR}/bin/python"
+  uv pip install --python "${VOICE_PY}" 'neutts[all]'
+  printf '%s\n' 'Reference voice cloning environment installed in .voice_venv.'
 fi
 PY="${VENV_DIR}/bin/python"
 uv pip install --python "${PY}" -r "${ROOT_DIR}/requirements-base.txt"
@@ -113,3 +128,4 @@ fi
 printf '\n%s\n' 'Setup complete.'
 printf 'Run: %s --demo --output %s/outputs/demo.mp4\n' "${PY}" "${ROOT_DIR}"
 printf 'Production: %s --reference portrait.jpg --audio voice.wav --animation-backend echomimic\n' "${PY}"
+printf 'Voice clone: %s --install-voice-clone, then pass --script --voice-reference --voice-reference-text\n' "$0"
