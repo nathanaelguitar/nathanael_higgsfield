@@ -10,12 +10,14 @@ DOWNLOAD_MODELS=0
 INSTALL_HEAVY=0
 INSTALL_COMFYUI=0
 INSTALL_VOICE_CLONE=0
+INSTALL_FAL=0
 
 usage() {
-  printf '%s\n' "Usage: $0 [--install-heavy] [--install-comfyui] [--install-voice-clone] [--download-models]"
+  printf '%s\n' "Usage: $0 [--install-heavy] [--install-comfyui] [--install-voice-clone] [--install-fal] [--download-models]"
   printf '%s\n' "  --install-heavy   install CUDA PyTorch and model-runtime dependencies"
   printf '%s\n' "  --install-comfyui clone/install ComfyUI wrapper dependencies"
   printf '%s\n' "  --install-voice-clone install the isolated NeuTTS reference-voice environment"
+  printf '%s\n' "  --install-fal     install the hosted fal.ai Seedance client (no CUDA stack)"
   printf '%s\n' "  --download-models download default checkpoints (several GB)"
 }
 
@@ -24,6 +26,7 @@ for arg in "$@"; do
     --install-heavy) INSTALL_HEAVY=1 ;;
     --install-comfyui) INSTALL_COMFYUI=1 ;;
     --install-voice-clone) INSTALL_VOICE_CLONE=1 ;;
+    --install-fal) INSTALL_FAL=1 ;;
     --download-models) DOWNLOAD_MODELS=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
@@ -69,11 +72,19 @@ fi
 PY="${VENV_DIR}/bin/python"
 uv pip install --python "${PY}" -r "${ROOT_DIR}/requirements-base.txt"
 
+if (( INSTALL_FAL )); then
+  uv pip install --python "${PY}" 'fal-client>=0.10'
+  printf '%s\n' 'fal.ai client installed; export FAL_KEY before submitting a hosted job.'
+fi
+
 # EchoMimic's flash branch currently depends on this compatible runtime and
 # has an aarch64-incompatible optional decord import. Keep the patch explicit
 # and reproducible instead of relying on an ignored working-tree edit.
 if [[ -f "${ROOT_DIR}/third_party/EchoMimicV3/infer_flash.py" ]]; then
   "${PY}" "${ROOT_DIR}/compat/patch_echomimic.py" "${ROOT_DIR}/third_party/EchoMimicV3"
+fi
+if [[ -f "${ROOT_DIR}/third_party/Wan2.1/wan/modules/attention.py" ]]; then
+  "${PY}" "${ROOT_DIR}/compat/patch_wan.py" "${ROOT_DIR}/third_party/Wan2.1"
 fi
 if [[ -d "${ROOT_DIR}/third_party/CodeFormer" ]]; then
   "${PY}" "${ROOT_DIR}/compat/patch_codeformer.py" "${ROOT_DIR}/third_party/CodeFormer"
@@ -129,3 +140,4 @@ printf '\n%s\n' 'Setup complete.'
 printf 'Run: %s --demo --output %s/outputs/demo.mp4\n' "${PY}" "${ROOT_DIR}"
 printf 'Production: %s --reference portrait.jpg --audio voice.wav --animation-backend echomimic\n' "${PY}"
 printf 'Voice clone: %s --install-voice-clone, then pass --script --voice-reference --voice-reference-text\n' "$0"
+printf 'Hosted voice clone: %s --reference-audio voice.wav --text "..."\n' "${PY} run_fal_voice_clone.py"
