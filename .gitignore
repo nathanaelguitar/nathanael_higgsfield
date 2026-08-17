@@ -1,5 +1,9 @@
 .venv/
 .voice_venv/
+.hunyuan_venv/
+.latentsync_venv/
+.env
+.env.*
 __pycache__/
 .pytest_cache/
 *.py[cod]
@@ -13,3 +17,10 @@ outputs/*
 # Shallow clones are bootstrapped by setup.sh, not vendored into this repo.
 third_party/*
 !third_party/.gitkeep
+
+# Remotion dependencies, build output, and local source media.
+remotion_mix/node_modules/
+remotion_mix/out/
+remotion_mix/remotion_mix/
+remotion_mix/public/*
+!remotion_mix/public/.gitkeep

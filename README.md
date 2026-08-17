@@ -90,3 +90,13 @@ External commands receive shell-quoted placeholders `{prompt}`, `{reference}`,
 `{output}`, `{duration}`, `{width}`, `{height}`, `{fps}`, and `{models}`.
 Only use portraits and voices with informed consent and appropriate rights;
 label synthetic media where required by the distribution channel.
+
+### Large-model and hosted backends
+
+The local Wan 2.1 14B and HunyuanVideo 1.5 experiments are documented in
+[`docs/LARGE_MODEL_MEMORY.md`](docs/LARGE_MODEL_MEMORY.md). The recommended
+next quality experiment is the hosted Seedance 2.0 reference-to-video path
+through fal.ai. It is usage-billed and does not load a local video model into
+the DGX Spark memory pool. See [`docs/SEEDANCE_API.md`](docs/SEEDANCE_API.md)
+for authentication, request shape, media-upload requirements, and acceptance
+checks.
