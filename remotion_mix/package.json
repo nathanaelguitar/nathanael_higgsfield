@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "render": "remotion render src/index.ts CanopyChatTrailer out/canopychat_trailer_with_music.mp4",
+    "render:subtitles": "remotion render src/subtitle_entry.tsx CanopyChatSubtitleEdit out/canopychat_subtitled_punchy.mp4",
     "preview": "remotion studio src/index.ts"
   },
   "dependencies": {
