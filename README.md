@@ -100,3 +100,6 @@ through fal.ai. It is usage-billed and does not load a local video model into
 the DGX Spark memory pool. See [`docs/SEEDANCE_API.md`](docs/SEEDANCE_API.md)
 for authentication, request shape, media-upload requirements, and acceptance
 checks.
+
+The TRIBE-based pre-finalization scoring hypothesis and resource-safe experiment
+plan are documented in [`docs/TRIBE_VIRALITY_HYPOTHESIS.md`](docs/TRIBE_VIRALITY_HYPOTHESIS.md).
