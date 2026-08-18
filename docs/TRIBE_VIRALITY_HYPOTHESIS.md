@@ -24,6 +24,46 @@ language features and predicts responses for an average subject on the
 fsaverage5 cortical mesh. It is not trained to predict views, retention, or
 shares directly.
 
+## Affective-region virality proxy
+
+The working hypothesis is that a stronger early response in affective-salience
+and valuation circuitry may improve attention, replays, comments, and shares.
+The local scorer implements this as an interpretable ranking proxy, not as a
+clinical measurement or a calibrated probability of virality.
+
+TRIBE's released output is a 20,484-vertex fsaverage5 cortical prediction. The
+scorer uses cortical proxies for:
+
+- salience: anterior insula and anterior/mid cingulate cortex;
+- appraisal/valuation: orbitofrontal and medial frontal cortex, subcallosal
+  cortex, and temporal pole.
+
+The released output does not directly measure the amygdala, hypothalamus,
+hippocampus, brainstem, cerebellum, cortisol, adrenaline, or heart rate. Those
+remain part of the conceptual low-road/high-road hypothesis, not observed
+variables in this predictor.
+
+Given raw TRIBE predictions saved as an `.npz` containing `preds` and `times`,
+rank a candidate batch with:
+
+```bash
+.tribe_venv/bin/python scripts/predict_virality.py \
+  /tmp/v1_predictions.npz /tmp/v2_predictions.npz \
+  --reference /path/to/frozen_reference_01.npz /path/to/frozen_reference_02.npz \
+  --output /tmp/canopychat_virality.json
+```
+
+The default score weights the first five seconds with exponential temporal
+decay, combines affective mean and peak response with salience and valuation
+response, and converts the result to a percentile. With `--reference`, that
+percentile is measured against a frozen reference distribution rather than the
+current candidate batch. This is the required mode for comparing campaigns
+over time. The reference pool should eventually contain videos with real
+completion/share labels; before calibration, the result is an absolute
+activation percentile, not a virality probability. Without `--reference`,
+`meets_70th_percentile` only means “top 30% of this batch.” Neither
+interpretation means that 70% of the brain is activated.
+
 References:
 
 - [TRIBE v2 model card and weights](https://huggingface.co/facebook/tribev2)
