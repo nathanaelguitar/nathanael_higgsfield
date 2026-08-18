@@ -103,6 +103,9 @@ checks.
 
 The TRIBE-based pre-finalization scoring hypothesis and resource-safe experiment
 plan are documented in [`docs/TRIBE_VIRALITY_HYPOTHESIS.md`](docs/TRIBE_VIRALITY_HYPOTHESIS.md).
+The affective-region ranking CLI is [`scripts/predict_virality.py`](scripts/predict_virality.py).
+The paired founder/faceless hook scripts are in
+[`docs/CANOPYCHAT_AB_TEST_SCRIPTS.md`](docs/CANOPYCHAT_AB_TEST_SCRIPTS.md).
 
 The isolated TRIBE environment, encoder downloads, gated Llama resume path,
 and no-load verification are documented in

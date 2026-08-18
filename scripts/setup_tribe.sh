@@ -22,7 +22,7 @@ uv pip install --python "${PY}" \
   neuralset==0.0.2 neuraltrain==0.0.2 exca==0.5.20 \
   x-transformers==1.27.20 gtts langdetect spacy Levenshtein \
   huggingface_hub==0.26.2 transformers==4.46.2 moviepy==2.2.1 \
-  soundfile==0.13.1 julius
+  soundfile==0.13.1 julius nilearn==0.12.1
 uv pip install --python "${PY}" --no-deps -e "${ROOT_DIR}/third_party/tribev2"
 
 "${PY}" "${ROOT_DIR}/scripts/download_tribe_assets.py" "$@"
