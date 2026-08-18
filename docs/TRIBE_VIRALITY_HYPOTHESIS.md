@@ -30,6 +30,45 @@ References:
 - [TRIBE v2 source repository](https://github.com/facebookresearch/tribev2)
 - [TRIBE v2 paper](https://arxiv.org/abs/2605.04326)
 
+### Local checkpoint status
+
+The TRIBE prediction checkpoint and configuration are staged locally at:
+
+```text
+models/tribev2/best.ckpt
+models/tribev2/config.yaml
+```
+
+The checkpoint is approximately 677 MiB. It has not been loaded into Python or
+CUDA. TRIBE's auxiliary feature encoders are separate dependencies and have
+not been downloaded yet.
+
+## Pre-token screening gate
+
+The predictor should run before any paid Seedance or other hosted video render.
+The gate has two increasingly realistic passes:
+
+1. **Script/audio pass.** Generate several script variants, synthesize cheap
+   temporary speech, and rank the opening language, pacing, and audio response.
+2. **Animatic pass.** For only the best script variants, assemble a low-cost
+   vertical storyboard from a reference frame, placeholder cuts/captions, and
+   the temporary speech. Run TRIBE on that animatic to include visual timing
+   and audiovisual interaction.
+3. **Hosted render.** Send only the top-ranked animatics to Seedance. Discard
+   candidates below the configured relative score or minimum opening score.
+
+The first pass is useful for eliminating weak copy, but it cannot judge the
+final face, camera, or generated motion. The animatic is the budget-friendly
+proxy for those properties. The gate should rank candidates and enforce a
+relative cutoff; it cannot honestly guarantee virality until calibrated on
+actual retention, completion, replay, and share outcomes.
+
+TRIBE's public wrapper accepts one of `text_path`, `audio_path`, or `video_path`.
+For repeatable local screening, prefer a locally generated WAV through
+`audio_path`; the upstream `text_path` helper converts text through gTTS and
+then transcribes it, which introduces a network dependency and a voice choice
+that may not match the eventual render.
+
 ## Proposed scoring features
 
 Given a candidate video with duration `T`, compute TRIBE predictions at each
@@ -149,25 +188,29 @@ with actual platform outcomes or a blinded human preference test.
 
 ### Phase 3: pre-finalization gate
 
-For every candidate video:
+For every campaign:
 
-1. Render a draft.
-2. Run the predictor.
-3. Show the opening response curve and the top recommended edit.
-4. Render only after the creator accepts or rejects the recommendation.
+1. Generate multiple scripts without calling a paid video API.
+2. Run the script/audio pass and retain only the top candidates.
+3. Build cheap animatics for those candidates and run the video pass.
+4. Send only the finalists above the configured cutoff to the paid renderer.
+5. Run TRIBE once more on the final render for post hoc comparison with the
+   animatic prediction.
 
 The predictor should advise the editor, not automatically determine whether a
 video is publishable.
 
 ## Memory and execution notes
 
-The TRIBE checkpoint is small compared with its feature encoders. The default
+The TRIBE prediction checkpoint is small compared with its feature encoders. The default
 configuration references Llama 3.2-3B, V-JEPA2, and Wav2Vec-BERT, and its
 feature-extraction infrastructure can cache representations in memory.
 
 On the DGX Spark, use an isolated process and start conservatively:
 
 - stop Qwen first;
+- use the staged checkpoint at `models/tribev2/best.ckpt` rather than fetching
+  another copy;
 - keep at least 30 GB of unified memory available for TRIBE and transient
   feature tensors;
 - prefer BF16/FP16 encoders where the implementation supports it;
