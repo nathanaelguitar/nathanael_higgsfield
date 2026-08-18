@@ -2,6 +2,7 @@
 .voice_venv/
 .hunyuan_venv/
 .latentsync_venv/
+.tribe_venv/
 .env
 .env.*
 __pycache__/

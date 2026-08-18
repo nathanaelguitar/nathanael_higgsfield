@@ -104,6 +104,10 @@ checks.
 The TRIBE-based pre-finalization scoring hypothesis and resource-safe experiment
 plan are documented in [`docs/TRIBE_VIRALITY_HYPOTHESIS.md`](docs/TRIBE_VIRALITY_HYPOTHESIS.md).
 
+The isolated TRIBE environment, encoder downloads, gated Llama resume path,
+and no-load verification are documented in
+[`docs/TRIBE_SETUP.md`](docs/TRIBE_SETUP.md).
+
 Qwen memory lifecycle and restart instructions are documented in
 [`docs/QWEN_LIFECYCLE.md`](docs/QWEN_LIFECYCLE.md). Stop Qwen before loading
 TRIBE or any large local video model.
